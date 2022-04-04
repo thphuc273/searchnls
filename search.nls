@@ -1,0 +1,412 @@
+breed [nodes node]
+
+globals [initColor initNode goalNode]
+nodes-own [nState nParent]
+patches-own [pParent pPath-cost frontiers? expands?]
+
+to mark-color [#label]
+  if pcolor != black and pcolor != (black + 5) 
+  [
+    ifelse pcolor != white
+    [
+      set pcolor (pcolor + 10)
+      if not member? #label expands?
+      [
+        set expands? lput #label expands?
+      ]
+    ]
+    [
+      set pcolor initColor
+      set expands? lput #label expands?
+    ]
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREADTH-FIRST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Breadth-first search
+;; receives three inputs:
+;;           + #Init:      1 patch where 1 searcher agent starts at
+;;           + #Goal:      1 patch where 1 goal agent is
+;;           + #valid-map: all possible patches that searcher agent can move-to
+to-report BFS [#Init #Goal #valid-map #label]
+  let frontier (list)  ; frontier FIFO queue
+
+  ; initial state
+  ask #Init [
+    ; add a node in patch
+    mark-color #label
+    sprout-nodes 1 [
+      ht
+      set nState #Init
+      set nParent self
+
+      set frontier fput self frontier    ; add initial node into frontier
+      set initNode self                  ; initial node
+    ]
+  ]
+
+  let reached-goal? false
+  let exist-path? true
+
+  ; check if init is goal or not
+  if #Init = #Goal
+  [
+    set reached-goal? true
+  ]
+
+  ; if init is goal return path
+  if reached-goal?
+  [
+    report (list #Init #Goal)
+  ]
+
+  while [not reached-goal? and exist-path?]
+  [
+    ; check frontier queue is empty or not
+    ifelse not empty? frontier
+    [
+      ; pop the first element from frontier
+      let current-node first frontier
+      set frontier remove current-node frontier
+
+      ask current-node
+      [
+        let pat nState    ; the patch of current node
+
+        ask pat [
+          ; get valid moves
+          let valid-neighbors neighbors with [member? self #valid-map and not member? #label expands?]
+
+          ask valid-neighbors [
+            ; create a node in each move
+            ; 1 patch can have many nodes representing for many paths
+            if not reached-goal?
+            [
+              sprout-nodes 1 [
+                ht
+                set nState myself
+                set nParent current-node
+                
+                set frontier lput self frontier      ; add new node to frontier at the end queue
+                
+                if nState = #Goal [set goalNode self]
+              ]
+              
+              ifelse self = #Goal
+              [
+                set reached-goal? true
+              ]
+              [
+                mark-color #label
+              ]
+             ]
+           ]
+        ]
+      ]
+    ]
+    [
+      ; if frontier queue is empty before finding a solution path
+      set exist-path? false
+    ]
+  ]
+
+  ; Generate path if exists
+  if exist-path?
+  [
+    let path (list #Goal)
+    let current goalNode
+
+    ; loop until reach initial node
+    while [current != initNode]
+    [
+      set current [nParent] of current
+      set path fput [nState] of current path
+    ]
+
+    report path
+  ]
+
+  ; No solution
+  report false
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREADTH-FIRST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DEPTH-FIRST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Depth-first search
+;; receives three inputs:
+;;           + #Init:      1 patch where 1 searcher agent starts at
+;;           + #Goal:      1 patch where 1 goal agent is
+;;           + #valid-map: all possible patches that searcher agent can move-to
+to-report DFS [#Init #Goal #valid-map #label]
+  let frontier (list)  ; frontier FIFO queue
+
+  ; initial state
+  ask #Init [
+    ; add a node in patch
+    sprout-nodes 1 [
+      ht
+      set nState #Init
+      set nParent self
+
+      set frontier fput self frontier    ; add initial node into frontier
+      set initNode self                  ; initial node
+    ]
+    mark-color #label
+  ]
+
+  let exist-path? true
+  let reached-goal? false
+
+  ; check if init is goal or not
+  if #Init = #Goal
+  [
+    set reached-goal? true
+  ]
+
+  ; if init is goal return path
+  if reached-goal?
+  [
+    report (list #Init #Goal)
+  ]
+
+  while [not reached-goal? and exist-path?]
+  [
+    ; check frontier queue is empty or not
+    ifelse not empty? frontier
+    [
+      ; pop the first element from frontier
+      let current-node first frontier
+      set frontier remove current-node frontier
+
+      ask current-node
+      [
+        let pat nState    ; the patch of current node
+
+        ask pat [
+          ; get valid moves
+          let valid-neighbors neighbors with [member? self #valid-map and not member? #label expands?]
+
+          ask valid-neighbors [
+            ; create a node in each move
+            ; 1 patch can have many nodes representing for many paths
+            if not reached-goal?
+            [
+              sprout-nodes 1 [
+                ht
+                set nState myself
+                set nParent current-node
+                
+                set frontier fput self frontier      ; add new node to frontier at the end queue
+                
+                if nState = #Goal [set goalNode self]
+              ]
+              ifelse self = #Goal
+              [
+                set reached-goal? true
+              ]
+              [
+                mark-color #label
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+    [
+      ; if frontier queue is empty before finding a solution path
+      set exist-path? false
+    ]
+  ]
+
+  ; Generate path if exists
+  if exist-path?
+  [
+    let path (list #Goal)
+    let current goalNode
+
+    ; loop until reach initial node
+    while [current != initNode]
+    [
+      set current [nParent] of current
+      set path fput [nState] of current path
+    ]
+
+    report path
+  ]
+
+  ; No solution
+  report false
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DEPTH-FIRST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; UNIFORM-COST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Uniform cost search
+;; receives three inputs:
+;;           + #Init:      1 patch where 1 searcher agent starts at
+;;           + #Goal:      1 patch where 1 goal agent is
+;;           + #valid-map: all possible patch that searcher agent can move-to
+to-report UCS [#Init #Goal #valid-map #label]
+  ; Initial state
+  ask #Init [
+    set pParent self
+    set pPath-cost 0
+    set frontiers? lput #label frontiers?
+  ]
+
+  let exist-path? true
+  while [not member? #label [expands?] of #Goal and exist-path?]
+  [
+    ; get all possible nodes in frontier queue
+    let options #valid-map with [member? #label frontiers?]
+
+    ; check if frontier queue is empty or not
+    ifelse any? options
+    [
+      ; get the node that has minimum f(n) = g(n) + h(n)
+      ask min-one-of options [pPath-cost] [
+        ; pop this node from frontier queue
+        set frontiers? remove #label frontiers? 
+        set expands? lput #label expands?
+        mark-color #label    ; mark green for expanded node
+
+        ; get all possible moves
+        let valid-neighbors neighbors with [member? self #valid-map]
+
+        let parent-path-cost pPath-cost
+
+        ; generate all successors of the current node
+        ask valid-neighbors [
+          let cost ifelse-value member? #label frontiers? [pPath-cost] [5 ^ 10]
+
+          ; if (this state is in frontier queue with higher node's total cost) or node is not expanded
+          if cost > (parent-path-cost + distance myself) and not member? #label expands?
+          [
+            ; Update node
+            set pParent myself
+            set pPath-cost parent-path-cost + distance myself
+            set frontiers? lput #label frontiers?
+          ]
+        ]
+      ]
+    ]
+    [
+      ; frontier queue is empty but no solution is founded
+      set exist-path? false
+    ]
+  ]
+
+  ; Generate path if exists
+  if exist-path?
+  [
+    let current #Goal
+    let path (list current)
+    ; loop from goal node to initial node
+    while [current != #Init]
+    [
+      set current [pParent] of current
+      set path fput current path
+    ]
+    report path
+  ]
+
+  ; No solution
+  report false
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; UNIFORM-COST SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; A* SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; A* search
+;; receives three inputs:
+;;           + #Init:      1 patch where 1 searcher agent starts at
+;;           + #Goal:      1 patch where 1 goal agent is
+;;           + #valid-map: all possible patch that searcher agent can move-to
+to-report A* [#Init #Goal #valid-map #label]
+  ; Initial state
+  ask #Init [
+    set pParent self
+    set pPath-cost 0
+    set frontiers? lput #label frontiers?
+  ]
+
+  let exist-path? true
+  while [not member? #label [expands?] of #Goal and exist-path?]
+  [
+    ; get all possible nodes in frontier queue
+    let options #valid-map with [member? #label frontiers?]
+
+    ; check if frontier queue is empty or not
+    ifelse any? options
+    [
+      ; get the node that has minimum f(n) = g(n) + h(n)
+      ask min-one-of options [Total-expect-cost #Goal] [
+        ; pop this node from frontier queue
+        set frontiers? remove #label frontiers? 
+        set expands? lput #label expands?
+        mark-color #label    ; mark green for expanded node
+
+        ; get all possible moves
+        let valid-neighbors neighbors with [member? self #valid-map]
+
+        let parent-path-cost pPath-cost
+
+        ; generate all successors of the current node
+        ask valid-neighbors [
+          let cost ifelse-value member? #label frontiers? [Total-expect-cost #Goal] [5 ^ 10]
+
+          ; if (this state is in frontier queue with higher node's total cost) or node is not expanded
+          if cost > (parent-path-cost + distance myself + Heuristic #Goal) and not member? #label expands?
+          [
+            ; Update node
+            set pParent myself
+            set pPath-cost parent-path-cost + distance myself
+            set frontiers? lput #label frontiers?
+          ]
+        ]
+      ]
+    ]
+    [
+      ; frontier queue is empty but no solution is founded
+      set exist-path? false
+    ]
+  ]
+
+  ; Generate path if exists
+  if exist-path?
+  [
+    let current #Goal
+    let path (list current)
+    ; loop from goal node to initial node
+    while [current != #Init]
+    [
+      set current [pParent] of current
+      set path fput current path
+    ]
+    report path
+  ]
+
+  ; No solution
+  report false
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; A* SEARCH ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; f(n) = g(n) + h(n)
+to-report Total-expect-cost [#Goal]
+  report pPath-cost + Heuristic #Goal
+end
+
+; distance from a patch to goal patch
+to-report Heuristic [#Goal]
+  let gx [pxcor] of #Goal
+  let gy [pycor] of #Goal
+  let x pxcor
+  let y pycor
+  report sqrt ((gx - x) * (gx - x) + (gy - y) * (gy - y))
+end
